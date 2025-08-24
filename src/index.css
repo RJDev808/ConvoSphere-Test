@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth theme transitions */
+html {
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Default Light */
+body {
+  @apply bg-background-light text-text-light;
+}
+
+/* Dark Mode */
+.dark body {
+  @apply bg-background-dark text-text-dark;
+}
