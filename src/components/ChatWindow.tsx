@@ -24,17 +24,21 @@ type Props = {
 
 // This function runs directly in the browser
 async function translateText(text: string, targetLang: string): Promise<string> {
-  if (!text || !targetLang || targetLang === "en") {
+  if (!text || !targetLang || targetLang === "en") { // Assuming 'en' is the base language, no need to translate
     return "";
   }
   try {
-    const response = await fetch("/.netlify/functions/translate", { // <-- This is the new endpoint
+    const response = await fetch("https://libretranslate-ptg8.onrender.com", {
       method: "POST",
-      body: JSON.stringify({ text, targetLang }),
+      body: JSON.stringify({
+        q: text,
+        source: "auto",
+        target: targetLang,
+        format: "text",
+      }),
+      headers: { "Content-Type": "application/json" },
     });
-    
-    if (!response.ok) throw new Error("Netlify function failed");
-    
+    if (!response.ok) throw new Error("Translation API failed");
     const data = await response.json();
     return data.translatedText || "";
   } catch (error) {
