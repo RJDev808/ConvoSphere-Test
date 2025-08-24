@@ -28,7 +28,7 @@ async function translateText(text: string, targetLang: string): Promise<string> 
     return "";
   }
   try {
-    const response = await fetch("https://libretranslate-ptg8.onrender.com", {
+    const response = await fetch("https://libretranslate-ptg8.onrender.com/translate", {
       method: "POST",
       body: JSON.stringify({
         q: text,
