@@ -5,41 +5,45 @@ import { useAuth } from "../AuthContext";
 import { db, doc, updateDoc } from "../firebase";
 import { User, Save, Shield, Palette, Trash2 } from 'lucide-react';
 
-const avatarColors = ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'];
+// A list of colors for the avatar background
+const avatarColors = [
+    '#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'
+];
 
 export default function Settings() {
   const { user, userProfile, updateUserEmail, updateUserPassword, deleteAccount } = useAuth();
   const [activeSection, setActiveSection] = useState('profile');
   const [msg, setMsg] = useState({ text: '', type: 'success' });
+
+  // --- New Avatar State ---
   const [avatarType, setAvatarType] = useState('male');
   const [avatarColor, setAvatarColor] = useState(avatarColors[0]);
+  
+  // Account State
   const [currentPassword, setCurrentPassword] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Language State
   const [preferredLang, setPreferredLang] = useState(userProfile?.preferredLang || 'en');
 
+  // This effect sets the initial avatar selection based on the user's current photoURL
   useEffect(() => {
     if (userProfile?.photoURL) {
         try {
             const url = new URL(userProfile.photoURL);
-            // This logic now checks for the new 'avataaars' style or falls back to the old 'personas' style
-            const topParam = url.searchParams.getAll('top[]');
-            const seedParam = url.searchParams.get('seed');
+            const seed = url.searchParams.get('seed');
             const color = url.searchParams.get('backgroundColor');
-            
-            if (topParam.includes('LongHairStraight')) {
-                setAvatarType('female');
-            } else if (seedParam === 'female') { // Fallback for old style
-                setAvatarType('female');
-            } else {
-                setAvatarType('male');
-            }
-
+            if (seed) setAvatarType(seed);
             if (color) setAvatarColor(`#${color}`);
-        } catch (e) { console.error("Could not parse avatar URL", e); }
+        } catch (e) {
+            console.error("Could not parse avatar URL", e);
+        }
     }
-    if (userProfile) setPreferredLang(userProfile.preferredLang);
+    if (userProfile) {
+      setPreferredLang(userProfile.preferredLang);
+    }
   }, [userProfile]);
 
   const showMessage = (text: string, type: 'success' | 'error' = 'success') => {
@@ -47,15 +51,16 @@ export default function Settings() {
     setTimeout(() => setMsg({ text: '', type: 'success' }), 4000);
   };
 
+  // --- New Avatar Save Function ---
   const handleSaveAvatar = async () => {
     if (!user) return;
-    // Use the 'avataaars' style with specific hairstyles for a clear distinction
-    const topType = avatarType === 'female' ? 'LongHairStraight' : 'ShortHairShortFlat';
-    const newPhotoURL = `https://api.dicebear.com/7.x/avataaars/svg?top[]=${topType}&backgroundColor=${avatarColor.substring(1)}`;
+    // Construct the new URL from Dicebear API
+    const newPhotoURL = `https://api.dicebear.com/7.x/personas/svg?seed=${avatarType}&backgroundColor=${avatarColor.substring(1)}`;
     try {
         await updateDoc(doc(db, "users", user.uid), { photoURL: newPhotoURL });
         showMessage("Avatar updated successfully!");
     } catch (error) {
+        console.error("Avatar update failed:", error);
         showMessage("Failed to update avatar.", "error");
     }
   };
@@ -72,37 +77,59 @@ export default function Settings() {
 
   const handleUpdateEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail || !currentPassword) return showMessage("All fields are required.", "error");
+    if (!newEmail || !currentPassword) {
+        showMessage("All fields are required.", "error");
+        return;
+    }
     try {
         await updateUserEmail(currentPassword, newEmail);
         showMessage("Email updated successfully!");
-        setCurrentPassword(''); setNewEmail('');
-    } catch (error: any) { showMessage(error.message, "error"); }
+        setCurrentPassword('');
+        setNewEmail('');
+    } catch (error: any) {
+        showMessage(error.message, "error");
+    }
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) return showMessage("New passwords do not match.", "error");
+    if (newPassword !== confirmPassword) {
+        showMessage("New passwords do not match.", "error");
+        return;
+    }
     try {
         await updateUserPassword(currentPassword, newPassword);
         showMessage("Password updated successfully!");
-        setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-    } catch (error: any) { showMessage(error.message, "error"); }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!currentPassword) return showMessage("Please enter your password to confirm deletion.", "error");
-    if (window.confirm("Are you sure? This action is irreversible.")) {
-        try {
-            await deleteAccount(currentPassword);
-        } catch (error: any) { showMessage(error.message, "error"); }
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    } catch (error: any) {
+        showMessage(error.message, "error");
     }
   };
 
-  const sections = { profile: { icon: User, label: 'Profile' }, chats: { icon: Palette, label: 'Chats & Appearance' }, security: { icon: Shield, label: 'Security' }, danger: { icon: Trash2, label: 'Danger Zone' } };
+  const handleDeleteAccount = async () => {
+    if (!currentPassword) {
+        showMessage("Please enter your password to confirm deletion.", "error");
+        return;
+    }
+    if (window.confirm("Are you sure? This action is irreversible.")) {
+        try {
+            await deleteAccount(currentPassword);
+        } catch (error: any) {
+            showMessage(error.message, "error");
+        }
+    }
+  };
+
+  const sections = {
+    profile: { icon: User, label: 'Profile' },
+    chats: { icon: Palette, label: 'Chats & Appearance' },
+    security: { icon: Shield, label: 'Security' },
+    danger: { icon: Trash2, label: 'Danger Zone' },
+  };
   
-  const topTypePreview = avatarType === 'female' ? 'LongHairStraight' : 'ShortHairShortFlat';
-  const currentAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?top[]=${topTypePreview}&backgroundColor=${avatarColor.substring(1)}`;
+  const currentAvatarUrl = `https://api.dicebear.com/7.x/personas/svg?seed=${avatarType}&backgroundColor=${avatarColor.substring(1)}`;
 
   return (
     <div className="flex h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
@@ -119,8 +146,14 @@ export default function Settings() {
                 ))}
             </nav>
         </div>
+
         <div className="flex-1 p-6 overflow-y-auto">
-            {msg.text && <div className={`p-3 rounded-md mb-6 text-sm ${msg.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>{msg.text}</div>}
+            {msg.text && (
+                <div className={`p-3 rounded-md mb-6 text-sm ${msg.type === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                    {msg.text}
+                </div>
+            )}
+
             {activeSection === 'profile' && (
                 <div className="space-y-6">
                     <h3 className="text-lg font-semibold border-b pb-2 dark:border-slate-700">Profile Information</h3>
@@ -136,13 +169,17 @@ export default function Settings() {
                             </div>
                             <div>
                                 <label className="text-sm font-medium">Color</label>
-                                <div className="flex gap-2 mt-1 flex-wrap">
-                                    {avatarColors.map(color => <button key={color} onClick={() => setAvatarColor(color)} className={`w-6 h-6 rounded-full border-2 ${avatarColor === color ? 'border-blue-500' : 'border-transparent'}`} style={{ backgroundColor: color }}></button>)}
+                                <div className="flex gap-2 mt-1">
+                                    {avatarColors.map(color => (
+                                        <button key={color} onClick={() => setAvatarColor(color)} className={`w-6 h-6 rounded-full border-2 ${avatarColor === color ? 'border-blue-500' : 'border-transparent'}`} style={{ backgroundColor: color }}></button>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                     </div>
-                     <button onClick={handleSaveAvatar} className="flex items-center gap-2 text-sm bg-green-500 text-white px-4 py-2 rounded-md"><Save size={16}/> Save Avatar</button>
+                     <button onClick={handleSaveAvatar} className="flex items-center gap-2 text-sm bg-green-500 text-white px-4 py-2 rounded-md">
+                        <Save size={16}/> Save Avatar
+                    </button>
                     <div className="pt-4">
                         <label className="text-sm text-slate-500">Username</label>
                         <p className="font-medium text-lg">{userProfile?.username}</p>
@@ -153,20 +190,59 @@ export default function Settings() {
                     </div>
                 </div>
             )}
-            {/* Other sections remain unchanged */}
+            
+            {/* Other sections remain the same */}
             {activeSection === 'chats' && (
                 <div className="space-y-6">
-                    {/* ... content for chats section ... */}
+                    <h3 className="text-lg font-semibold border-b pb-2 dark:border-slate-700">Chats & Appearance</h3>
+                    <div>
+                        <label htmlFor="lang-select" className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Language</label>
+                        <p className="text-xs text-slate-500 mb-2">This will be your default language for receiving translated messages in new chats.</p>
+                        <select id="lang-select" value={preferredLang} onChange={e => setPreferredLang(e.target.value)} className="p-2 border rounded bg-white dark:bg-slate-700">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="hi">Hindi</option>
+                            <option value="bn">Bengali</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ja">Japanese</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="ru">Russian</option>
+                            <option value="ar">Arabic</option>
+                        </select>
+                        <button onClick={handleSaveLanguage} className="ml-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm">Save</button>
+                    </div>
                 </div>
             )}
+
             {activeSection === 'security' && (
                 <div className="space-y-8">
-                    {/* ... content for security section ... */}
+                    <form onSubmit={handleUpdateEmail} className="space-y-3">
+                        <h3 className="text-lg font-semibold border-b pb-2 dark:border-slate-700">Change Email</h3>
+                        <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="New Email" required className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700" />
+                        <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current Password" required className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700" />
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm">Update Email</button>
+                    </form>
+                    <form onSubmit={handleUpdatePassword} className="space-y-3">
+                        <h3 className="text-lg font-semibold border-b pb-2 dark:border-slate-700">Change Password</h3>
+                        <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Current Password" required className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700" />
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="New Password" required className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700" />
+                        <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm New Password" required className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700" />
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm">Update Password</button>
+                    </form>
                 </div>
             )}
+
             {activeSection === 'danger' && (
                  <div className="space-y-4 p-4 border border-red-500 rounded-lg">
-                    {/* ... content for danger section ... */}
+                    <h3 className="text-lg font-semibold text-red-600">Danger Zone</h3>
+                    <div>
+                        <p className="text-sm font-medium">Delete Account</p>
+                        <p className="text-xs text-slate-500 mb-2">This will permanently delete your account, profile, and all your chats. This action is irreversible.</p>
+                        <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Enter your password to confirm" className="w-full max-w-sm p-2 border rounded bg-white dark:bg-slate-700 mb-2" />
+                        <button onClick={handleDeleteAccount} className="px-4 py-2 bg-red-600 text-white rounded-md text-sm">Delete My Account</button>
+                    </div>
                 </div>
             )}
         </div>
