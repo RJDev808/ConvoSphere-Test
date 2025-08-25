@@ -2,6 +2,7 @@
 import Sidebar from "../components/Sidebar";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
+import Logo from "../components/Logo"; // Import the new Logo
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 import { useEffect, useState } from "react";
@@ -18,38 +19,34 @@ export default function ChatPage() {
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // This effect determines who the other user is based on the chatId
   useEffect(() => {
     if (!chatId || !user?.uid) {
       setIsLoading(false);
       setOtherUserId(null);
       return;
     }
-
     const findOtherParticipant = async () => {
       setIsLoading(true);
       const chatDocRef = doc(db, "chats", chatId);
       const chatDocSnap = await getDoc(chatDocRef);
-
       if (chatDocSnap.exists()) {
-        const chatData = chatDocSnap.data() as Chat;
-        const otherId = chatData.participants.find(p => p !== user.uid);
+        const otherId = (chatDocSnap.data() as Chat).participants.find(p => p !== user.uid);
         setOtherUserId(otherId || null);
       } else {
-        // If chat doesn't exist, redirect to the main chats view
         nav("/chats");
       }
       setIsLoading(false);
     };
-
     findOtherParticipant();
   }, [chatId, user?.uid, nav]);
 
+  // This function now renders the new "dashboard" placeholder
   const renderChatContent = () => {
     if (!chatId) {
       return (
         <div className="h-full hidden md:flex flex-col items-center justify-center bg-white dark:bg-slate-800 rounded-lg shadow-inner">
-          <img src="/logo.svg" alt="Convosphere Logo" className="w-24 h-24 mb-4 opacity-50"/>
+          {/* Use the new Logo component here */}
+          <Logo className="w-24 h-24 mb-4 opacity-50" />
           <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-400">Welcome to Convosphere</h2>
           <p className="text-slate-500">Select a chat to start messaging.</p>
         </div>
@@ -68,12 +65,9 @@ export default function ChatPage() {
     <div className="flex h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
       <Sidebar />
       <main className="flex-1 flex">
-        {/* ChatList: Hidden on mobile IF a chat is selected */}
         <div className={`w-full transition-all duration-300 md:w-96 border-r dark:border-slate-800 ${chatId ? 'hidden md:flex' : 'flex'}`}>
           <ChatList />
         </div>
-        
-        {/* ChatWindow container: Hidden on mobile UNLESS a chat is selected */}
         <div className={`flex-1 ${chatId ? 'block' : 'hidden md:block'}`}>
           {renderChatContent()}
         </div>

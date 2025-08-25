@@ -1,31 +1,33 @@
 // src/App.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
 import ChatPage from "./pages/ChatPage";
 import Search from "./pages/Search";
 import Settings from "./pages/Settings";
 import ProtectedRoute from "./ProtectedRoute";
+import { useAuth } from "./AuthContext";
 
-// It's cleaner to group all protected routes under a single parent ProtectedRoute.
+// A small component to handle the redirect logic
+function Redirector() {
+    const { user } = useAuth();
+    // If user is logged in, redirect from root to /chats, which is our new dashboard
+    return user ? <Navigate to="/chats" /> : <Home />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         {/* Public Route */}
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Redirector />} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          {/* The Dashboard route is removed, ChatPage is now the main view */}
+          <Route path="/chats" element={<ChatPage />} />
+          <Route path="/chats/:chatId" element={<ChatPage />} />
           <Route path="/search" element={<Search />} />
           <Route path="/settings" element={<Settings />} />
-          
-          {/* This route handles the main chat page with the list */}
-          <Route path="/chats" element={<ChatPage />} />
-          
-          {/* THIS IS THE NEW LINE: It handles specific, individual chats */}
-          <Route path="/chats/:chatId" element={<ChatPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

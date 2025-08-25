@@ -2,15 +2,8 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 import ThemeToggle from "./ThemeToggle";
+import Logo from "./Logo"; // Import the new Logo component
 import { MessageSquare, Search, Settings, LogOut } from 'lucide-react';
-
-// New SVG Logo Component
-const Logo = () => (
-    <svg width="32" height="32" viewBox="0 0 100 100" className="text-blue-600 dark:text-blue-400">
-        <path fill="currentColor" d="M50 10 C 27.9 10 10 27.9 10 50 C 10 72.1 27.9 90 50 90 C 58.5 90 66.4 87.5 73 83.2 L 73 69.8 C 67.2 73.4 60.9 75.8 54.2 75.8 C 38 75.8 25.2 63 25.2 46.8 C 25.2 30.6 38 17.8 54.2 17.8 C 60.9 17.8 67.2 20.2 73 23.8 L 73 10.4 C 66.4 6.1 58.5 4.2 50 4.2 L 50 10 Z M 90 50 C 90 38.3 84.1 27.8 75.8 21.1 L 62.4 21.1 C 68.2 26.9 71.6 34.6 71.6 43.2 C 71.6 51.8 68.2 59.5 62.4 65.3 L 75.8 65.3 C 84.1 58.6 90 48.1 90 50 Z" />
-    </svg>
-);
-
 
 export default function Sidebar() {
   const { logout, userProfile } = useAuth();
@@ -32,7 +25,8 @@ export default function Sidebar() {
       {/* Top Section */}
       <div>
         <div className="flex items-center gap-2 mb-6">
-            <Logo />
+            {/* Use the new Logo component */}
+            <Logo className="w-8 h-8 text-blue-600 dark:text-blue-400" />
             <h2 className="hidden md:block text-2xl font-bold text-blue-600 dark:text-blue-400">
                 Convosphere
             </h2>
@@ -43,6 +37,7 @@ export default function Sidebar() {
             <NavLink
               key={item.to}
               to={item.to}
+              end // Add 'end' prop to prevent matching parent routes like /chats/:chatId
               className={({ isActive }) =>
                 `flex items-center justify-center md:justify-start gap-3 px-3 py-2 rounded-lg transition ${
                   isActive
