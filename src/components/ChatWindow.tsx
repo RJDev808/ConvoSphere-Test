@@ -22,24 +22,31 @@ type Props = {
   onBack: () => void;
 };
 
-// This function runs directly in the browser
+// ===================================================================================
+// THIS IS THE ONLY FUNCTION THAT HAS CHANGED
+// ===================================================================================
 async function translateText(text: string, targetLang: string): Promise<string> {
-  if (!text || !targetLang || targetLang === "en") { // Assuming 'en' is the base language, no need to translate
+  // Don't call the API if there's no text or if the target is the base language
+  if (!text || !targetLang || targetLang === "en") {
     return "";
   }
+
+  // ===================================================================================
+  // TODO: PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+  // ===================================================================================
+  const scriptUrl = 'https://script.google.com/macros/s/AKfycbyVPzcpFCzTaww9D5CGHyEYLw-iHd7uE8DV0BEg6KLgSqgmvgxtqMk8307FWxFeCT3B/exec';
+
+  const url = `${scriptUrl}?text=${encodeURIComponent(text)}&target=${targetLang}`;
+
   try {
-    const response = await fetch("https://libretranslate-ptg8.onrender.com/translate", {
-      method: "POST",
-      body: JSON.stringify({
-        q: text,
-        source: "auto",
-        target: targetLang,
-        format: "text",
-      }),
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) throw new Error("Translation API failed");
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Translation API failed with status: ${response.status}`);
+    }
     const data = await response.json();
+    if (data.error) {
+        throw new Error(data.error);
+    }
     return data.translatedText || "";
   } catch (error) {
     console.error("Translation failed:", error);
@@ -120,18 +127,14 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: Props) {
     }
   };
 
-  // THIS IS THE NEW, CORRECTED FUNCTION
   const handleLanguageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     if (!user) return;
     const newLang = e.target.value;
 
-    // 1. Update the preference in Firestore
     await updateDoc(doc(db, "chats", chatId), { [`prefs.${user.uid}`]: newLang });
     
-    // 2. Update the local state for preferences
     setPrefs((prev) => ({ ...prev, [user.uid]: newLang }));
 
-    // 3. Force re-translation of existing messages
     const retranslatedMessages = await Promise.all(
       messages.map(async (msg) => {
         if (msg.sender !== user.uid) {
