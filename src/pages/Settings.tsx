@@ -5,42 +5,45 @@ import { useAuth } from "../AuthContext";
 import { db, doc, updateDoc } from "../firebase";
 import { User, Save, Shield, Palette, Trash2 } from 'lucide-react';
 
-const avatarColors = ['#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'];
+// A list of colors for the avatar background
+const avatarColors = [
+    '#ffadad', '#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#bdb2ff', '#ffc6ff'
+];
 
 export default function Settings() {
   const { user, userProfile, updateUserEmail, updateUserPassword, deleteAccount } = useAuth();
   const [activeSection, setActiveSection] = useState('profile');
   const [msg, setMsg] = useState({ text: '', type: 'success' });
+
+  // --- New Avatar State ---
   const [avatarType, setAvatarType] = useState('male');
   const [avatarColor, setAvatarColor] = useState(avatarColors[0]);
+  
+  // Account State
   const [currentPassword, setCurrentPassword] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Language State
   const [preferredLang, setPreferredLang] = useState(userProfile?.preferredLang || 'en');
 
+  // This effect sets the initial avatar selection based on the user's current photoURL
   useEffect(() => {
     if (userProfile?.photoURL) {
         try {
             const url = new URL(userProfile.photoURL);
-            // --- FIX REGION 1: Logic to read the new avatar style ---
-            // This now checks for the specific hairstyle parameter ('top[]')
-            const topParam = url.searchParams.getAll('top[]');
-            const seedParam = url.searchParams.get('seed'); // Fallback for old style
+            const seed = url.searchParams.get('seed');
             const color = url.searchParams.get('backgroundColor');
-            
-            if (topParam.includes('LongHairStraight')) {
-                setAvatarType('female');
-            } else if (seedParam === 'female') { // Fallback for old 'personas' style
-                setAvatarType('female');
-            } else {
-                setAvatarType('male');
-            }
-
+            if (seed) setAvatarType(seed);
             if (color) setAvatarColor(`#${color}`);
-        } catch (e) { console.error("Could not parse avatar URL", e); }
+        } catch (e) {
+            console.error("Could not parse avatar URL", e);
+        }
     }
-    if (userProfile) setPreferredLang(userProfile.preferredLang);
+    if (userProfile) {
+      setPreferredLang(userProfile.preferredLang);
+    }
   }, [userProfile]);
 
   const showMessage = (text: string, type: 'success' | 'error' = 'success') => {
@@ -48,16 +51,16 @@ export default function Settings() {
     setTimeout(() => setMsg({ text: '', type: 'success' }), 4000);
   };
 
+  // --- New Avatar Save Function ---
   const handleSaveAvatar = async () => {
     if (!user) return;
-    // --- FIX REGION 2: Logic to generate the new avatar URL ---
-    // This now uses the 'avataaars' style with specific hairstyles for a clear distinction.
-    const topType = avatarType === 'female' ? 'LongHairStraight' : 'ShortHairShortFlat';
-    const newPhotoURL = `https://api.dicebear.com/7.x/avataaars/svg?top[]=${topType}&backgroundColor=${avatarColor.substring(1)}`;
+    // Construct the new URL from Dicebear API
+    const newPhotoURL = `https://api.dicebear.com/7.x/personas/svg?seed=${avatarType}&backgroundColor=${avatarColor.substring(1)}`;
     try {
         await updateDoc(doc(db, "users", user.uid), { photoURL: newPhotoURL });
         showMessage("Avatar updated successfully!");
     } catch (error) {
+        console.error("Avatar update failed:", error);
         showMessage("Failed to update avatar.", "error");
     }
   };
@@ -74,38 +77,59 @@ export default function Settings() {
 
   const handleUpdateEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEmail || !currentPassword) return showMessage("All fields are required.", "error");
+    if (!newEmail || !currentPassword) {
+        showMessage("All fields are required.", "error");
+        return;
+    }
     try {
         await updateUserEmail(currentPassword, newEmail);
         showMessage("Email updated successfully!");
-        setCurrentPassword(''); setNewEmail('');
-    } catch (error: any) { showMessage(error.message, "error"); }
+        setCurrentPassword('');
+        setNewEmail('');
+    } catch (error: any) {
+        showMessage(error.message, "error");
+    }
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) return showMessage("New passwords do not match.", "error");
+    if (newPassword !== confirmPassword) {
+        showMessage("New passwords do not match.", "error");
+        return;
+    }
     try {
         await updateUserPassword(currentPassword, newPassword);
         showMessage("Password updated successfully!");
-        setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-    } catch (error: any) { showMessage(error.message, "error"); }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!currentPassword) return showMessage("Please enter your password to confirm deletion.", "error");
-    if (window.confirm("Are you sure? This action is irreversible.")) {
-        try {
-            await deleteAccount(currentPassword);
-        } catch (error: any) { showMessage(error.message, "error"); }
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    } catch (error: any) {
+        showMessage(error.message, "error");
     }
   };
 
-  const sections = { profile: { icon: User, label: 'Profile' }, chats: { icon: Palette, label: 'Chats & Appearance' }, security: { icon: Shield, label: 'Security' }, danger: { icon: Trash2, label: 'Danger Zone' } };
+  const handleDeleteAccount = async () => {
+    if (!currentPassword) {
+        showMessage("Please enter your password to confirm deletion.", "error");
+        return;
+    }
+    if (window.confirm("Are you sure? This action is irreversible.")) {
+        try {
+            await deleteAccount(currentPassword);
+        } catch (error: any) {
+            showMessage(error.message, "error");
+        }
+    }
+  };
+
+  const sections = {
+    profile: { icon: User, label: 'Profile' },
+    chats: { icon: Palette, label: 'Chats & Appearance' },
+    security: { icon: Shield, label: 'Security' },
+    danger: { icon: Trash2, label: 'Danger Zone' },
+  };
   
-  // --- FIX REGION 3: Logic to generate the preview avatar URL ---
-  const topTypePreview = avatarType === 'female' ? 'LongHairStraight' : 'ShortHairShortFlat';
-  const currentAvatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?top[]=${topTypePreview}&backgroundColor=${avatarColor.substring(1)}`;
+  const currentAvatarUrl = `https://api.dicebear.com/7.x/personas/svg?seed=${avatarType}&backgroundColor=${avatarColor.substring(1)}`;
 
   return (
     <div className="flex h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
