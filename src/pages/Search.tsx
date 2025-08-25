@@ -1,6 +1,6 @@
 // src/pages/Search.tsx
 import { useState } from "react";
-import Sidebar from "../components/Sidebar"; // Use the Sidebar for consistent layout
+import Sidebar from "../components/Sidebar";
 import { db } from "../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useAuth } from "../AuthContext";
@@ -13,8 +13,7 @@ export default function Search() {
   const [results, setResults] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  // Get the full userProfile to access preferredLang
-  const { user, userProfile } = useAuth();
+  const { user } = useAuth();
   const nav = useNavigate();
 
   const doSearch = async (e: React.FormEvent) => {
@@ -38,16 +37,19 @@ export default function Search() {
     }
   };
 
-  // This function is now simplified, no more prompts!
   const startChat = async (otherUser: UserProfile) => {
-    if (!user || !userProfile) return;
-    // Use the current user's default preferred language for the new chat
-    const chatId = await createOrOpenChat(user.uid, otherUser.uid, userProfile.preferredLang);
+    if (!user) return;
+    let lang = prompt(`Enter the language code you want to receive messages from ${otherUser.username} in (e.g., en, es, hi).`, "en");
+    
+    if (!lang) {
+      lang = "en";
+    }
+
+    const chatId = await createOrOpenChat(user.uid, otherUser.uid, lang.trim().toLowerCase());
     nav(`/chats/${chatId}`);
   };
 
   return (
-    // New layout structure for consistency
     <div className="flex h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
         <Sidebar />
         <main className="flex-1 p-6">

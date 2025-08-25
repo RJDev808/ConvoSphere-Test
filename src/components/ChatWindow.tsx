@@ -1,12 +1,14 @@
 // src/components/ChatWindow.tsx
 import React, { useEffect, useState, useRef } from "react";
-import { collection, query, orderBy, onSnapshot, doc, getDoc, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, getDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { sendEncryptedMessage, decryptMessageForUser, deleteMessageForEveryone } from "../services/chatService";
 import type { UserProfile, EncryptedMessage, Chat } from "../types";
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
+// The custom Avatar component is no longer needed here
+// import Avatar from "./Avatar";
 
 async function translateText(text: string, targetLang: string): Promise<string> {
     if (!text || !targetLang || targetLang === "en") { return ""; }
@@ -53,9 +55,14 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
       const userSnap = await getDoc(userDocRef);
       if (userSnap.exists()) setOtherUser(userSnap.data() as UserProfile);
 
+      // Listen for real-time updates to chat preferences
       const chatRef = doc(db, "chats", chatId);
-      const chatSnap = await getDoc(chatRef);
-      if (chatSnap.exists()) setChatDetails(chatSnap.data() as Chat);
+      const unsub = onSnapshot(chatRef, (chatSnap) => {
+        if (chatSnap.exists()) {
+            setChatDetails(chatSnap.data() as Chat);
+        }
+      });
+      return () => unsub();
     }
     fetchMetadata();
   }, [chatId, otherUserId]);
@@ -68,7 +75,6 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
       const myPrefLang = chatDetails?.prefs?.[user.uid] || 'en';
       const processedMessages = await Promise.all(
         snap.docs.map(async (d) => {
-          // --- THIS LINE NO LONGER CAUSES AN ERROR ---
           const encryptedMsgData = d.data() as Omit<EncryptedMessage, 'id'>;
           let plaintext = "[Encryption Error]";
           try {
@@ -117,6 +123,13 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
     }
   };
 
+  const handleLanguageChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!user) return;
+    const newLang = e.target.value;
+
+    await updateDoc(doc(db, "chats", chatId), { [`prefs.${user.uid}`]: newLang });
+  };
+
   const groupedMessages: { [key: string]: Message[] } = messages.reduce((acc, msg) => {
     const dateKey = format(msg.createdAt, 'yyyy-MM-dd');
     if (!acc[dateKey]) acc[dateKey] = [];
@@ -131,6 +144,7 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
           <button onClick={onBack} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded-full md:hidden">
             <ArrowLeft size={20} />
           </button>
+          {/* --- FIX: Reverted to the original img tag --- */}
           <img 
             src={otherUser?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${otherUser?.username || '?'}`} 
             alt={otherUser?.username} 
@@ -141,6 +155,26 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
             <div className="text-xs text-slate-500">End-to-end encrypted</div>
           </div>
         </div>
+        
+        {user && chatId && (
+          <select
+            value={chatDetails?.prefs?.[user.uid] || "en"}
+            onChange={handleLanguageChange}
+            className="p-1 border rounded bg-white dark:bg-slate-700 dark:border-slate-600 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+          >
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+            <option value="hi">Hindi</option>
+            <option value="bn">Bengali</option>
+            <option value="zh">Chinese</option>
+            <option value="ja">Japanese</option>
+            <option value="pt">Portuguese</option>
+            <option value="ru">Russian</option>
+            <option value="ar">Arabic</option>
+          </select>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
