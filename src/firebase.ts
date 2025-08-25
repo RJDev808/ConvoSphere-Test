@@ -1,4 +1,5 @@
 // src/firebase.ts
+// This file initializes and exports all Firebase services.
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -13,24 +14,25 @@ import {
   getDoc,
   deleteDoc,
   updateDoc,
+  addDoc, // Ensure addDoc is imported from firebase/firestore
 } from "firebase/firestore";
 
+// --- IMPORTANT ---
+// PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
 const firebaseConfig = {
-  apiKey: "AIzaSyBEf-0Uc9tUXc38Z6L-wUIczaHqrdG0mxU",
-  authDomain: "convosphere-b0e5e.firebaseapp.com",
-  projectId: "convosphere-b0e5e",
-  storageBucket: "convosphere-b0e5e.firebasestorage.app",
-  messagingSenderId: "1065333733060",
-  appId: "1:1065333733060:web:6c9b75ba5a7d66ab727b91"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
 const app = initializeApp(firebaseConfig);
 
-// Initialize services and export them
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Firestore helper exports
 export {
   collection,
   doc,
@@ -42,4 +44,5 @@ export {
   getDoc,
   deleteDoc,
   updateDoc,
+  addDoc, // --- FIX: Export addDoc here ---
 };

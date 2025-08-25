@@ -1,14 +1,15 @@
 // src/pages/ChatPage.tsx
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import Layout from "../components/Layout";
+import Sidebar from "../components/Sidebar";
 import ChatList from "../components/ChatList";
 import ChatWindow from "../components/ChatWindow";
-import { db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
+import { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import type { Chat } from "../types";
 
+// This is now the main "dashboard" of the app.
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const { user } = useAuth();
@@ -16,51 +17,40 @@ export default function ChatPage() {
 
   const [otherUserId, setOtherUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
+  // This effect determines who the other user is based on the chatId
   useEffect(() => {
     if (!chatId || !user?.uid) {
       setIsLoading(false);
+      setOtherUserId(null);
       return;
     }
 
     const findOtherParticipant = async () => {
       setIsLoading(true);
-      setError(null);
-      try {
-        const chatDocRef = doc(db, "chats", chatId);
-        const chatDocSnap = await getDoc(chatDocRef);
+      const chatDocRef = doc(db, "chats", chatId);
+      const chatDocSnap = await getDoc(chatDocRef);
 
-        if (chatDocSnap.exists()) {
-          const chatData = chatDocSnap.data() as Chat;
-          const otherId = chatData.participants.find(p => p !== user.uid);
-          if (otherId) {
-            setOtherUserId(otherId);
-          } else {
-            throw new Error("Could not determine the other participant.");
-          }
-        } else {
-          throw new Error("Chat not found.");
-        }
-      } catch (err) {
-        console.error("Failed to load chat:", err);
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("An unknown error occurred while loading the chat.");
-        }
-      } finally {
-        setIsLoading(false);
+      if (chatDocSnap.exists()) {
+        const chatData = chatDocSnap.data() as Chat;
+        const otherId = chatData.participants.find(p => p !== user.uid);
+        setOtherUserId(otherId || null);
+      } else {
+        // If chat doesn't exist, redirect to the main chats view
+        nav("/chats");
       }
+      setIsLoading(false);
     };
 
     findOtherParticipant();
-  }, [chatId, user?.uid]);
+  }, [chatId, user?.uid, nav]);
 
-  const renderContent = () => {
+  const renderChatContent = () => {
     if (!chatId) {
       return (
-        <div className="h-full hidden md:flex items-center justify-center bg-white dark:bg-slate-800 rounded-lg shadow">
+        <div className="h-full hidden md:flex flex-col items-center justify-center bg-white dark:bg-slate-800 rounded-lg shadow-inner">
+          <img src="/logo.svg" alt="Convosphere Logo" className="w-24 h-24 mb-4 opacity-50"/>
+          <h2 className="text-xl font-semibold text-slate-600 dark:text-slate-400">Welcome to Convosphere</h2>
           <p className="text-slate-500">Select a chat to start messaging.</p>
         </div>
       );
@@ -68,37 +58,26 @@ export default function ChatPage() {
     if (isLoading) {
       return <div className="h-full flex items-center justify-center"><p>Loading chat...</p></div>;
     }
-    if (error) {
-      return <div className="h-full flex items-center justify-center"><p className="text-red-500">{error}</p></div>;
-    }
     if (otherUserId) {
-      return (
-        <ChatWindow
-          chatId={chatId}
-          otherUserId={otherUserId}
-          onBack={() => nav("/chats")}
-        />
-      );
+      return <ChatWindow chatId={chatId} otherUserId={otherUserId} onBack={() => nav("/chats")} />;
     }
-    return <div className="h-full flex items-center justify-center"><p className="text-red-500">Could not load chat participant.</p></div>;
+    return <div className="h-full flex items-center justify-center"><p className="text-red-500">Could not load chat.</p></div>;
   };
 
   return (
-    <Layout>
-      {/* This container now controls the responsive layout */}
-      <div className="flex h-[calc(100vh-84px)]"> {/* Fills the available height */}
-        
+    <div className="flex h-screen bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
+      <Sidebar />
+      <main className="flex-1 flex">
         {/* ChatList: Hidden on mobile IF a chat is selected */}
-        <div className={`w-full transition-all duration-300 md:w-80 ${chatId ? 'hidden md:block' : 'block'}`}>
+        <div className={`w-full transition-all duration-300 md:w-96 border-r dark:border-slate-800 ${chatId ? 'hidden md:flex' : 'flex'}`}>
           <ChatList />
         </div>
         
         {/* ChatWindow container: Hidden on mobile UNLESS a chat is selected */}
         <div className={`flex-1 ${chatId ? 'block' : 'hidden md:block'}`}>
-          {renderContent()}
+          {renderChatContent()}
         </div>
-
-      </div>
-    </Layout>
+      </main>
+    </div>
   );
 }

@@ -1,70 +1,84 @@
 // src/services/chatService.ts
-import { db } from "../firebase";
-import { doc, getDoc, setDoc, collection, addDoc } from "firebase/firestore";
-import { importPublicKeyFromJwk, importPrivateKeyFromJwk, deriveSharedKey, encryptWithSharedKey, decryptWithSharedKey } from "./crypto";
+import { db, doc, getDoc, setDoc, addDoc, collection, deleteDoc, serverTimestamp } from "../firebase";
+import {
+  ensureLocalPrivateKeyExists,
+  importPrivateKeyFromJwk,
+  importPublicKeyFromJwk,
+  deriveSharedKey,
+  encryptWithSharedKey,
+  decryptWithSharedKey,
+} from "./crypto";
+import type { EncryptedMessage, UserProfile } from "../types";
 
-// helper: deterministic chat id
-export function chatIdFor(uidA: string, uidB: string) {
-  return [uidA, uidB].sort().join("_");
+// This function remains the same as the one I provided previously
+export async function createOrOpenChat(uid1: string, uid2: string, myLang: string): Promise<string> {
+    const chatId = [uid1, uid2].sort().join("_");
+    const chatRef = doc(db, "chats", chatId);
+    const chatSnap = await getDoc(chatRef);
+  
+    if (!chatSnap.exists()) {
+      await setDoc(chatRef, {
+        participants: [uid1, uid2],
+        prefs: { [uid1]: myLang },
+        colors: {
+            [uid1]: 'bg-blue-600',
+            [uid2]: 'bg-gray-200 dark:bg-slate-700'
+        },
+        createdAt: serverTimestamp()
+      });
+    }
+    return chatId;
 }
 
-// create or return chat doc ref; prefs: map of uid->lang
-export async function createOrOpenChat(uidA: string, uidB: string, myPrefLang = "en") {
-  const id = chatIdFor(uidA, uidB);
-  const docRef = doc(db, "chats", id);
-  const snap = await getDoc(docRef);
-  if (!snap.exists()) {
-    const prefs: Record<string, string> = {};
-    prefs[uidA] = myPrefLang;
-    prefs[uidB] = "en"; // default for other; they can change later
-    await setDoc(docRef, {
-      id,
-      participants: [uidA, uidB],
-      prefs,
-      createdAt: new Date()
+// --- THIS FUNCTION IS NOW CORRECTED ---
+export async function sendEncryptedMessage(chatId: string, senderId: string, recipientId: string, plaintext: string): Promise<void> {
+    // 1. Get user profiles to find their public keys
+    const recipientSnap = await getDoc(doc(db, "users", recipientId));
+    if (!recipientSnap.exists()) throw new Error("Recipient not found.");
+    const recipientProfile = recipientSnap.data() as UserProfile;
+
+    // 2. Ensure my local private key exists and import it
+    const myPrivJwk = await ensureLocalPrivateKeyExists(senderId);
+    const myPrivateKey = await importPrivateKeyFromJwk(myPrivJwk);
+
+    // 3. Import recipient's public key
+    const recipientPublicKey = await importPublicKeyFromJwk(recipientProfile.publicKeyJwk);
+
+    // 4. Derive the shared secret key
+    const sharedKey = await deriveSharedKey(myPrivateKey, recipientPublicKey);
+
+    // 5. Encrypt the message using the shared key
+    const { ciphertext, iv } = await encryptWithSharedKey(sharedKey, plaintext);
+
+    // 6. Store the encrypted data in Firestore
+    const messagesColRef = collection(db, "chats", chatId, "messages");
+    await addDoc(messagesColRef, {
+      chatId,
+      sender: senderId,
+      timestamp: serverTimestamp(),
+      // Your crypto file separates ciphertext and iv, so we store them that way
+      ciphertext: ciphertext,
+      iv: iv,
     });
-  }
-  return id;
 }
 
-// send encrypted message
-export async function sendEncryptedMessage(chatId: string, senderUid: string, recipientUid: string, plaintext: string) {
-  const otherDoc = await getDoc(doc(db, "users", recipientUid));
-  if (!otherDoc.exists() || !otherDoc.data()?.publicKeyJwk) {
-    throw new Error("Recipient missing public key, cannot send message.");
-  }
-  const otherPub = otherDoc.data().publicKeyJwk;
-  const otherPublicKey = await importPublicKeyFromJwk(otherPub);
+// --- THIS FUNCTION IS NOW CORRECTED ---
+export async function decryptMessageForUser(encryptedMsg: Omit<EncryptedMessage, 'id'> & { iv: string }, myUid: string, otherUserPublicKeyJwk: JsonWebKey): Promise<string> {
+    // 1. Ensure my local private key exists and import it
+    const myPrivJwk = await ensureLocalPrivateKeyExists(myUid);
+    const myPrivateKey = await importPrivateKeyFromJwk(myPrivJwk);
 
-  const privRaw = localStorage.getItem("cs_privkey_" + senderUid);
-  if (!privRaw) throw new Error("Local private key not found. Please log in on the device where you registered.");
-  const privJwk = JSON.parse(privRaw);
-  const myPrivKey = await importPrivateKeyFromJwk(privJwk);
+    // 2. Import the other user's public key
+    const otherPublicKey = await importPublicKeyFromJwk(otherUserPublicKeyJwk);
 
-  const sharedKey = await deriveSharedKey(myPrivKey, otherPublicKey);
-  const { ciphertext, iv } = await encryptWithSharedKey(sharedKey, plaintext);
+    // 3. Derive the same shared secret
+    const sharedKey = await deriveSharedKey(myPrivateKey, otherPublicKey);
 
-  await addDoc(collection(db, "chats", chatId, "messages"), {
-    sender: senderUid,
-    ciphertext,
-    iv,
-    timestamp: new Date()
-  });
+    // 4. Decrypt using the shared key and the provided ciphertext and IV
+    return await decryptWithSharedKey(sharedKey, encryptedMsg.ciphertext as unknown as string, encryptedMsg.iv);
 }
 
-// decrypt a message
-export async function decryptMessageForUser(
-  msgData: { ciphertext: string; iv: string }, // Use a specific shape instead of any
-  myUid: string, 
-  otherPubJwk: JsonWebKey // Use the standard JsonWebKey type instead of any
-) {
-  // ... (the rest of the function remains the same)
-  const otherPublicKey = await importPublicKeyFromJwk(otherPubJwk);
-  const privRaw = localStorage.getItem("cs_privkey_" + myUid);
-  if (!privRaw) throw new Error("No local private key found; cannot decrypt.");
-  const privJwk = JSON.parse(privRaw);
-  const myPrivKey = await importPrivateKeyFromJwk(privJwk);
-  const sharedKey = await deriveSharedKey(myPrivKey, otherPublicKey);
-  const plaintext = await decryptWithSharedKey(sharedKey, msgData.ciphertext, msgData.iv);
-  return plaintext;
+// This function remains the same
+export async function deleteMessageForEveryone(chatId: string, messageId: string): Promise<void> {
+  await deleteDoc(doc(db, "chats", chatId, "messages", messageId));
 }

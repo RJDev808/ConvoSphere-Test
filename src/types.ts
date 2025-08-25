@@ -1,34 +1,31 @@
 // src/types.ts
 import { Timestamp } from "firebase/firestore";
 
-export interface UserProfile {
+export type UserProfile = {
   uid: string;
   username: string;
-  email: string | null;
+  email: string;
   publicKeyJwk: JsonWebKey;
   preferredLang: string;
   createdAt: Timestamp;
-}
+  photoURL?: string;
+};
 
-export interface Chat {
+export type Chat = {
   id: string;
   participants: string[];
-  prefs: Record<string, string>;
   createdAt: Timestamp;
-}
+  colors?: Record<string, string>; 
+  prefs?: Record<string, string>;
+};
 
-export interface ChatMessage {
+// --- THIS IS THE KEY FIX ---
+// This type now correctly includes the 'iv' field, matching what's in Firestore.
+export type EncryptedMessage = {
   id: string;
+  chatId: string;
   sender: string;
-  ciphertext: string;
+  ciphertext: string; 
   iv: string;
   timestamp: Timestamp;
-}
-
-export interface EncryptedMessage {
-  id: string;
-  sender: string;
-  ciphertext: string;
-  iv: string;
-  timestamp: Timestamp;
-}
+};

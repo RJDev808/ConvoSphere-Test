@@ -5,22 +5,28 @@ import {
   signInWithEmailAndPassword,
   signOut as fbSignOut,
   onAuthStateChanged,
-  getIdTokenResult, // <-- Make sure this is imported
+  getIdTokenResult,
+  updateEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   type User,
   type UserCredential,
 } from "firebase/auth";
-import { auth, db, collection, query, where, getDocs, setDoc, doc, serverTimestamp, getDoc, deleteDoc } from "./firebase";
+import { auth, db, doc, setDoc, getDoc, deleteDoc, serverTimestamp, query, collection, where, getDocs } from "./firebase";
 import { generateAndStoreKeyPairForUid } from "./services/crypto";
+import type { UserProfile } from "./types";
 
-// NOTE: Your deleteAccount function had a 'passwordForReauth' parameter that wasn't used.
-// I have removed it for now. We can add re-authentication logic later if needed.
 type AuthContextType = {
   user: User | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
   signup: (email: string, password: string, username: string) => Promise<UserCredential>;
   login: (email: string, password: string) => Promise<UserCredential>;
   logout: () => Promise<void>;
-  deleteAccount: () => Promise<void>; 
-  profileDocId?: string | null;
+  deleteAccount: (password: string) => Promise<void>;
+  updateUserEmail: (password: string, newEmail: string) => Promise<void>;
+  updateUserPassword: (oldPassword: string, newPassword: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,7 +39,8 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profileDocId, setProfileDocId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -41,10 +48,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (u) {
         const docRef = doc(db, "users", u.uid);
         const snap = await getDoc(docRef);
-        setProfileDocId(snap.exists() ? snap.id : null);
+        if (snap.exists()) {
+          setUserProfile(snap.data() as UserProfile);
+        } else {
+          setUserProfile(null);
+        }
       } else {
-        setProfileDocId(null);
+        setUserProfile(null);
       }
+      setLoading(false);
     });
     return () => unsub();
   }, []);
@@ -58,25 +70,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    
-    // THIS IS THE CRITICAL FIX FOR THE RACE CONDITION
-    // Force refresh the token to ensure the backend recognizes the new user.
     await getIdTokenResult(cred.user, true);
 
     const uid = cred.user.uid;
     const publicJwk = await generateAndStoreKeyPairForUid(uid);
 
-    const userDocRef = doc(db, "users", uid);
-    await setDoc(userDocRef, {
+    // Create a default avatar URL on signup
+    const defaultPhotoURL = `https://api.dicebear.com/7.x/personas/svg?seed=male&backgroundColor=b6e3f4`;
+
+    const newUserProfile: Omit<UserProfile, 'createdAt'> = {
       uid,
-      email: cred.user.email || null,
+      email: cred.user.email || "",
       username,
       publicKeyJwk: publicJwk,
       preferredLang: "en",
+      photoURL: defaultPhotoURL, // Set default avatar
+    };
+
+    await setDoc(doc(db, "users", uid), {
+      ...newUserProfile,
       createdAt: serverTimestamp(),
     });
 
-    setProfileDocId(uid);
+    setUserProfile(newUserProfile as UserProfile);
     return cred;
   };
 
@@ -84,21 +100,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => fbSignOut(auth);
 
-  const deleteAccount = async () => {
+  const reauthenticate = async (password: string) => {
+    if (!auth.currentUser || !auth.currentUser.email) throw new Error("User not found.");
+    const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+  };
+
+  const updateUserEmail = async (password: string, newEmail: string) => {
+    if (!auth.currentUser) throw new Error("No user logged in.");
+    await reauthenticate(password);
+    await updateEmail(auth.currentUser, newEmail);
+    await setDoc(doc(db, "users", auth.currentUser.uid), { email: newEmail }, { merge: true });
+  };
+
+  const updateUserPassword = async (oldPassword: string, newPassword: string) => {
+    if (!auth.currentUser) throw new Error("No user logged in.");
+    await reauthenticate(oldPassword);
+    await updatePassword(auth.currentUser, newPassword);
+  };
+
+  const deleteAccount = async (password: string) => {
     if (!auth.currentUser) throw new Error("No user logged in");
+    await reauthenticate(password);
+    
     try {
-      const uid = auth.currentUser.uid;
-      const userDocRef = doc(db, "users", uid);
-      await deleteDoc(userDocRef);
+      await deleteDoc(doc(db, "users", auth.currentUser.uid));
     } catch (err) {
       console.warn("Failed deleting user doc:", err);
     }
     await auth.currentUser.delete();
   };
 
-  return (
-    <AuthContext.Provider value={{ user, signup, login, logout, deleteAccount, profileDocId }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = {
+    user,
+    userProfile,
+    loading,
+    signup,
+    login,
+    logout,
+    deleteAccount,
+    updateUserEmail,
+    updateUserPassword,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
