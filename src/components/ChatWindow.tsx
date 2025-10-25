@@ -174,6 +174,7 @@ export default function ChatWindow({ chatId, otherUserId, onBack }: { chatId: st
             <option value="ru">Russian</option>
             <option value="ar">Arabic</option>
             <option value="ko">Korean</option>
+            <option value="as">Assamese</option>
           </select>
         )}
       </div>
